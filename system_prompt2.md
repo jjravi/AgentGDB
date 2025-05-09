@@ -45,7 +45,6 @@ help print
 print x  
 ```
 
-
 **Important Constraints:**
 
 - Never output the help command results, only the LLDB commands to execute.

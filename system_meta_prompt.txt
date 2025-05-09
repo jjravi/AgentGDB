@@ -5,4 +5,6 @@ Here is an example:
 
 I expect that the LLM model is not an expert at lldb, so I want to get the output of debugger.HandleCommand in the script so that I can use it as context in the LLM for future commands. Specifically, I want the llm to call "help" on a few commands in lldb so it can get some additional insight into how to use the command before performing it. 
 
-I already have the script, but I need help with the system prompt. Please help me write a system prompt that will help the LLM to be able to translate natural language debugging instructions into LLDB commands. And make it so that the LLM will always call "help" on a few commands in lldb so it can get some additional insight into how to use the command before performing it. 
+I already have the script and a decent system prompt that will help the LLM to be able to translate natural language debugging instructions into LLDB commands. The LLM will always call "help" on a few commands in lldb so it can get some additional insight into how to use the command before performing it. 
+
+But when it calls "help", I do not see any progress in lldb. And this is bad user experience, can you output to the terminal in maybe "light" text to show progress, like what the llm is generating and querying lldb? 

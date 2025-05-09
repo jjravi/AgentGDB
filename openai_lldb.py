@@ -4,6 +4,8 @@ import subprocess
 import sys
 import json
 import datetime
+import threading
+import time
 
 #####################################################
 # Execute Python using the shell and extract the sys.path (for site-packages)
@@ -11,13 +13,9 @@ paths = subprocess.check_output('python -c "import os,sys;print(os.linesep.join(
 
 # Extend LLDB's Python search path
 sys.path.extend(paths)
-#####################################################
 
-try:
-  from openai import OpenAI
-except ImportError:
-  print("You must install the openai package: pip install openai")
-  raise
+from openai import OpenAI
+#####################################################
 
 class LLDBCmdContext:
   def __init__(self):
@@ -46,6 +44,16 @@ def log_to_file(data, log_dir=None):
   
   return log_file
 
+def format_light_text(text):
+  """Format text as 'light' for terminal display."""
+  # Using ANSI escape code for dim text (not available in all terminals)
+  return f"\033[2m{text}\033[0m"
+
+def print_light(text):
+  """Print text in light formatting, immediately flushing output."""
+  sys.stdout.write(format_light_text(text))
+  sys.stdout.flush()
+
 def prompt_to_lldb_command(debugger, command, result, internal_dict):
   """
   LLDB command: prompt_to_lldb_command <natural language prompt>
@@ -69,13 +77,12 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
   context = internal_dict['cmd_context']
   
   interpreter = debugger.GetCommandInterpreter()
-  cmd_return = lldb.SBCommandReturnObject()
-
+  
   # Get command history for LLM context
   history_str = "\n".join([f"OUTPUT {i+1}:\n{item}" for i, item in enumerate(context.history[-3:])])
 
   # read system prompt from system_prompt.md
-  with open('/Users/jravi/AgentGDB/system_prompt2.md', 'r') as file:
+  with open('/Users/jravi/AgentGDB/system_prompt3.md', 'r') as file:
     system_prompt = file.read()
   
   # Initial user prompt
@@ -109,13 +116,28 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
   help_commands_used = []
   
   while help_iterations < max_help_iterations:
-    # Query OpenAI
-    response = client.chat.completions.create(
+    print_light("Thinking about your request...\n")
+    
+    # Query OpenAI with streaming enabled
+    stream = client.chat.completions.create(
         model="model-identifier",
         messages=messages,
-        temperature=0.0
+        temperature=0.0,
+        stream=True
     )
-    llm_output = response.choices[0].message.content.strip()
+    
+    # Process stream with immediate output
+    collected_response = ""
+    for chunk in stream:
+      if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+        content = chunk.choices[0].delta.content
+        if content:
+          # Immediately print each token
+          print_light(content)
+          collected_response += content
+    
+    print("\n")  # Add newline after all tokens
+    llm_output = collected_response.strip()
     
     # Log the LLM response
     log_to_file({
@@ -139,9 +161,18 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
         help_iterations += 1
         help_commands_used.append(command_line)
         
-        # Execute help command and capture output
+        # Show the help command
+        print_light(f"Exploring: {command_line}\n")
+        
+        # Execute help command and get output
+        cmd_return = lldb.SBCommandReturnObject()
         interpreter.HandleCommand(command_line, cmd_return)
         help_output = cmd_return.GetOutput() or ""
+        
+        # Display help output immediately, line by line
+        for line in help_output.split('\n'):
+          if line.strip():
+            print_light(line + "\n")
         
         # Log the help command execution
         log_to_file({
@@ -154,7 +185,6 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
         messages.append({"role": "assistant", "content": command_line})
         messages.append({"role": "user", "content": f"Help output:\n{help_output}\n\nNow based on this help information and my original request, what LLDB command should I use?"})
         
-        result.AppendMessage(f"Exploring command: {command_line}")
         break  # Process one help command at a time
     
     # If no help commands found, this must be our final command sequence
@@ -178,10 +208,6 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
       "help_commands_used": help_commands_used
     }, log_dir)
     
-    # Log help commands used (for debugging)
-    if help_commands_used:
-      result.AppendMessage(f"Help commands used: {', '.join(help_commands_used)}")
-    
     # Process and execute each command in the final output
     final_commands = [cmd.strip() for cmd in final_command.split('\n') if cmd.strip()]
     execution_results = []
@@ -191,6 +217,11 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
       if cmd.startswith("help "):
         continue
         
+      # Show executing message
+      result.AppendMessage(f"Executed: {cmd}")
+      
+      # Execute command
+      cmd_return = lldb.SBCommandReturnObject()
       interpreter.HandleCommand(cmd, cmd_return)
       output = cmd_return.GetOutput() or ""
       error = cmd_return.GetError() or ""
@@ -204,8 +235,8 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
       }, log_dir)
       
       execution_results.append(f"Command: {cmd}\nOutput:\n{output}\nError:\n{error}")
-      result.AppendMessage(f"Executed: {cmd}")
       
+      # Show command output
       if output:
         result.AppendMessage(output)
       if error:
@@ -237,6 +268,5 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
 
 def __lldb_init_module(debugger, internal_dict):
   debugger.HandleCommand('command script add -f openai_lldb.prompt_to_lldb_command llm')
-  print('"llm" command ready. Usage: (lldb) llm <natural-language-request>. Example:')
-  print('  (lldb) llm set a breakpoint at line 5 in main.cpp')
-
+  print("The 'llm' command has been installed. Use: llm <your instruction>")
+  

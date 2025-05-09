@@ -1,20 +1,42 @@
 import lldb
 import os
-import subprocess
 import sys
-import json
-import datetime
-import threading
-import time
+import types
+import importlib
+import re
 
 #####################################################
-# Execute Python using the shell and extract the sys.path (for site-packages)
-paths = subprocess.check_output('python -c "import os,sys;print(os.linesep.join(sys.path).strip())"', shell=True).decode("utf-8").split()
+# LazyLoader implementation for improved startup time
+class LazyLoader(types.ModuleType):
+    """
+    Lazily import a module only when its attributes are accessed.
+    """
+    def __init__(self, local_name, parent_module_globals, name, module_path=None):
+        self._local_name = local_name
+        self._parent_module_globals = parent_module_globals
+        self._module_path = module_path or name
+        
+        super(LazyLoader, self).__init__(name)
+        
+    def _load(self):
+        module = importlib.import_module(self._module_path)
+        self._parent_module_globals[self._local_name] = module
+        self.__dict__.update(module.__dict__)
+        return module
+        
+    def __getattr__(self, item):
+        module = self._load()
+        return getattr(module, item)
 
-# Extend LLDB's Python search path
-sys.path.extend(paths)
+# Lazily load dependencies
+subprocess = LazyLoader('subprocess', globals(), 'subprocess')
+json = LazyLoader('json', globals(), 'json')
+datetime = LazyLoader('datetime', globals(), 'datetime')
+threading = LazyLoader('threading', globals(), 'threading')
+time = LazyLoader('time', globals(), 'time')
 
-from openai import OpenAI
+# OpenAI will be loaded only when needed
+OpenAI = None
 #####################################################
 
 class LLDBCmdContext:
@@ -23,6 +45,11 @@ class LLDBCmdContext:
 
 def log_to_file(data, log_dir=None):
   """Log data to a file in the specified directory."""
+  # Import json and datetime only when this function is called
+  import json
+  import datetime
+  import os
+  
   if log_dir is None:
     log_dir = os.path.join(os.getcwd(), "llm_logs")
   
@@ -54,11 +81,57 @@ def print_light(text):
   sys.stdout.write(format_light_text(text))
   sys.stdout.flush()
 
+def extract_lldb_commands(markdown_text):
+  """
+  Extract LLDB commands from markdown code blocks.
+  
+  Looks for code blocks that start with ```lldb and end with ```.
+  Returns a list of commands and the remaining text (non-command text).
+  """
+  # Pattern to find ```lldb ... ``` blocks
+  pattern = r"```lldb\s*([\s\S]*?)\s*```"
+  
+  # Find all command blocks
+  command_blocks = re.findall(pattern, markdown_text)
+  
+  # Get all commands from the blocks
+  all_commands = []
+  for block in command_blocks:
+    commands = [cmd.strip() for cmd in block.split('\n') if cmd.strip()]
+    all_commands.extend(commands)
+  
+  # Replace command blocks with empty strings to get non-command text
+  non_command_text = re.sub(pattern, "", markdown_text)
+  
+  return all_commands, non_command_text
+
+def setup_openai():
+  """Setup OpenAI client - only called when needed."""
+  global OpenAI
+  if OpenAI is None:
+    print_light("Setting up OpenAI client...")
+    # Extend Python search path for site-packages only when needed
+    if not hasattr(setup_openai, 'path_extended'):
+      import subprocess
+      paths = subprocess.check_output('python -c "import os,sys;print(os.linesep.join(sys.path).strip())"', shell=True).decode("utf-8").split()
+      sys.path.extend(paths)
+      setup_openai.path_extended = True
+    
+    try:
+      from openai import OpenAI as OpenAIClient
+      OpenAI = OpenAIClient
+    except ImportError:
+      print("Error: OpenAI package not found. Please install it using: pip install openai")
+      raise
+
 def prompt_to_lldb_command(debugger, command, result, internal_dict):
   """
   LLDB command: prompt_to_lldb_command <natural language prompt>
   Example: prompt_to_lldb_command set a breakpoint at line 5 in main.cpp
   """
+  # Setup OpenAI only when this command is used
+  setup_openai()
+  
   # Initialize log file
   log_dir = os.path.join(os.getcwd(), "llm_logs")
   log_file = None
@@ -109,7 +182,7 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
   }, log_dir)
   
   # Conversation loop
-  final_command = None
+  final_commands = None
   help_iterations = 0
   min_help_iterations = 1  # Require at least one help command
   max_help_iterations = 5  # Safety limit to prevent infinite loops
@@ -147,8 +220,15 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
       "response": llm_output
     }, log_dir)
     
-    # Parse commands (one per line)
-    commands = [cmd.strip() for cmd in llm_output.split('\n') if cmd.strip()]
+    # Extract LLDB commands from markdown blocks
+    commands, text_output = extract_lldb_commands(llm_output)
+    
+    # If there are no commands but there's text content, it might be thinking aloud
+    if not commands and text_output.strip():
+      # Assume it's thinking/explaining, continue conversation
+      messages.append({"role": "assistant", "content": llm_output})
+      messages.append({"role": "user", "content": "Please provide LLDB commands in ```lldb code blocks to execute commands."})
+      continue
     
     # Track if any help commands were found in this response
     has_help_command = False
@@ -182,34 +262,32 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
         }, log_dir)
         
         # Add to conversation
-        messages.append({"role": "assistant", "content": command_line})
-        messages.append({"role": "user", "content": f"Help output:\n{help_output}\n\nNow based on this help information and my original request, what LLDB command should I use?"})
+        messages.append({"role": "assistant", "content": f"I'm exploring the `{command_line}` command to understand how to help you better.\n\n```\n{help_output}\n```"})
+        messages.append({"role": "user", "content": "Based on this help information and my original request, what LLDB command should I use? Please put the LLDB commands within ```lldb code blocks."})
         
         break  # Process one help command at a time
     
-    # If no help commands found, this must be our final command sequence
+    # If no help commands found, check if we can proceed to final commands
     if not has_help_command:
       # Make sure we've had at least one help command before accepting final command
       if help_iterations >= min_help_iterations:
-        final_command = llm_output
+        final_commands = commands
         break
       else:
         # Force the model to use help first
         messages.append({"role": "assistant", "content": llm_output})
-        messages.append({"role": "user", "content": "Before giving me the final command, please first use the help command to learn more about the relevant LLDB commands."})
+        messages.append({"role": "user", "content": "Before giving me the final command, please first use the help command to learn more about the relevant LLDB commands. Place your help command inside ```lldb code blocks."})
         continue
   
-  # Execute final command
-  if final_command:
+  # Execute final commands
+  if final_commands:
     # Log final command selection
     log_to_file({
       "event": "final_command",
-      "command": final_command,
+      "commands": final_commands,
       "help_commands_used": help_commands_used
     }, log_dir)
     
-    # Process and execute each command in the final output
-    final_commands = [cmd.strip() for cmd in final_command.split('\n') if cmd.strip()]
     execution_results = []
     
     for cmd in final_commands:
@@ -254,7 +332,7 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
     
     result.AppendMessage(f"Debug log saved to: {log_file}")
   else:
-    error_msg = "Failed to generate a final LLDB command after maximum help iterations."
+    error_msg = "Failed to generate valid LLDB commands after maximum help iterations."
     result.AppendMessage(error_msg)
     
     # Log failure

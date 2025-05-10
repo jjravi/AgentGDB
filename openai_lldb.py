@@ -5,39 +5,8 @@ import types
 import importlib
 import re
 
-#####################################################
-# LazyLoader implementation for improved startup time
-class LazyLoader(types.ModuleType):
-    """
-    Lazily import a module only when its attributes are accessed.
-    """
-    def __init__(self, local_name, parent_module_globals, name, module_path=None):
-        self._local_name = local_name
-        self._parent_module_globals = parent_module_globals
-        self._module_path = module_path or name
-        
-        super(LazyLoader, self).__init__(name)
-        
-    def _load(self):
-        module = importlib.import_module(self._module_path)
-        self._parent_module_globals[self._local_name] = module
-        self.__dict__.update(module.__dict__)
-        return module
-        
-    def __getattr__(self, item):
-        module = self._load()
-        return getattr(module, item)
-
-# Lazily load dependencies
-subprocess = LazyLoader('subprocess', globals(), 'subprocess')
-json = LazyLoader('json', globals(), 'json')
-datetime = LazyLoader('datetime', globals(), 'datetime')
-threading = LazyLoader('threading', globals(), 'threading')
-time = LazyLoader('time', globals(), 'time')
-
 # OpenAI will be loaded only when needed
 OpenAI = None
-#####################################################
 
 class LLDBCmdContext:
   def __init__(self):
@@ -142,7 +111,8 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
     "command": command
   }, log_dir)
   
-  client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
+  # client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
+  client = OpenAI(base_url="http://10.0.0.208:1234/v1", api_key="lm-studio")
   
   # Ensure we have a persistent context
   if 'cmd_context' not in internal_dict:

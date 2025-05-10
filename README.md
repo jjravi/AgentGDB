@@ -103,3 +103,10 @@ Contributions are welcome! Please open issues or pull requests on [GitHub](https
 ---
 
 **Note:** AgentGDB is under active development. Feedback and suggestions are highly appreciated!
+
+## GDB
+gdb_test.py implements this for gdb. You still need to have the openai Python package installed. It is recommmended to use a virtual environment like instructed above. Pass the Python script to gdb with the -x argument.
+
+```
+gdb -x ./gdb_test.py <path to binary>
+```

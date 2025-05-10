@@ -24,7 +24,7 @@ You are an AI assistant helping a user interact with GDB. Your current task is t
 *   **user-defined**: This class lists user-defined commands.
 
 **Example Input (User Query):**
-`"llm set a breakpoint at line 5 in main.cpp"`
+"agent set a breakpoint at line 5 in main.cpp"
 
 **Example Output:**
-`help breakpoints`
+breakpoints

@@ -8,18 +8,10 @@ import re
 OpenAI = None
 g_client = None
 
-def gdb_llm_prompt(x_prompt):
-    global client
-
-    f = open("system_prompt4.md","r")
-    system_message = f.read()
-
-    print("SYSTEM MESSAGE:\n " + system_message)
-    print("PROMPT:\n " + x_prompt)
-
+def query_llm(x_systemMessage, x_prompt):
     # Store messages for ongoing conversation
     messages = [
-      {"role": "system", "content": system_message},
+      {"role": "system", "content": x_systemMessage},
       {"role": "user", "content": x_prompt}
     ]
 
@@ -38,18 +30,126 @@ def gdb_llm_prompt(x_prompt):
         content = chunk.choices[0].delta.content
         if content:
           # Immediately print each token
+          #print(content, end="")
+          collected_response += content
+    #print("")
+
+    return collected_response
+
+    
+
+def gdb_llm_prompt(x_prompt):
+    global client
+
+    # STAGE 1
+    f = open("system_prompts/stage1.md","r")
+    system_message = f.read()
+
+    collected_response = query_llm(system_message, x_prompt)
+    cmd_class = collected_response
+    gdb_cmd = "help " + cmd_class.strip()
+
+    print("RUNNING GDB CMD: " + gdb_cmd)
+    gdb_cmd_class_help = gdb.execute(gdb_cmd, to_string=True)
+
+    gdb_help_class_list = gdb_cmd_class_help.split("\n")
+
+    gdb_output_list = []
+    for line in gdb_help_class_list:
+        if "set" not in line:
+            gdb_output_list.append(line)
+
+    gdb_cmd_class_help = "".join(gdb_output_list)
+    gdb_cmd_class_help = gdb_cmd_class_help.strip()
+    
+    # STAGE 3
+    f = open("system_prompts/stage3.md","r")
+    system_message = f.read()
+    system_message += "\n" + gdb_cmd_class_help
+    collected_response = query_llm(system_message, x_prompt)
+    print("STAGE 3 OUTPUT: " + str(collected_response))
+
+    gdb_detailed_help = gdb.execute("help " + str(collected_response), to_string=True)
+
+    # STAGE 4
+    f = open("system_prompts/stage4.md","r")
+    system_message = f.read()
+    system_message += "\n" + gdb_detailed_help
+    final_gdb_cmd = query_llm(system_message, x_prompt)
+    print("STAGE 4 OUTPUT: " + str(final_gdb_cmd))
+
+    gdb.execute(final_gdb_cmd)
+
+    '''
+    l_foundHelp = False
+    l_helpCmd = ""
+    for line in collected_response.split("\n"):
+        if "help" in line:
+            l_foundHelp = True
+            l_helpCmd = line
+            
+
+    l_executeHelp = False
+    gdb_output = ""
+    if l_foundHelp:
+        gdb_output = gdb.execute(l_helpCmd, to_string=True)
+        l_executeHelp = True
+    else:
+        print("ERROR: could not find help!")
+        exit()
+            
+
+    if l_executeHelp:
+        system_message += "\n" + gdb_output
+
+    # Store messages for ongoing conversation
+    messages = [
+      {"role": "system", "content": system_message},
+      {"role": "user", "content": x_prompt}
+    ]
+
+    print("SYS MESSAGE LEN: " + str(len(system_message)))
+
+    print(system_message)
+
+    # Query OpenAI with streaming enabled
+    stream = g_client.chat.completions.create(
+        model="model-identifier",
+        messages=messages,
+        temperature=0.0,
+        stream=True
+    )
+
+    # Process stream with immediate output
+    collected_response = ""
+    for chunk in stream:
+      print(chunk)
+      if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+        content = chunk.choices[0].delta.content
+        if content:
+          # Immediately print each token
           print(content, end="")
           collected_response += content
     print("")
 
-    print("RESPONSE: ")
-    collected_response = collected_response.replace("<think>","")
-    collected_response = collected_response.replace("</think>","")
-    collected_response = collected_response.strip()
-    print(collected_response.split("\n"))
+    l_saveLine = False
+    gdb_cmds = []
+    for line in collected_response.split("\n"):
+        if "```" in line and "gdb" not in line:
+            l_saveLine = False
 
-    for cmd in collected_response.split("\n"):
+        if l_saveLine and "help" not in line:
+            gdb_cmds.append(line)
+            
+        if "```gdb" in line:
+            l_saveLine = True
+    print("GDB CMDS:")
+    print(gdb_cmds)
+
+    for cmd in gdb_cmds:
         gdb.execute(cmd)
+    '''
+
         
 
 class GdbCommand(gdb.Command):

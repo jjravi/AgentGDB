@@ -25,4 +25,4 @@ You are an AI assistant helping a user interact with GDB. You have received the 
     ```
 
 **Example Output:**
-`help break`
+help break

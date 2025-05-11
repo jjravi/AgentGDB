@@ -125,7 +125,7 @@ def prompt_to_lldb_command(debugger, command, result, internal_dict):
   history_str = "\n".join([f"OUTPUT {i+1}:\n{item}" for i, item in enumerate(context.history[-3:])])
 
   # read system prompt from system_prompt.md
-  with open('/Users/jravi/AgentGDB/system_prompt3.md', 'r') as file:
+  with open('/Users/jravi/AgentGDB/system_prompt.md', 'r') as file:
     system_prompt = file.read()
   
   # Initial user prompt

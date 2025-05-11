@@ -4,12 +4,15 @@ import sys
 import types
 import importlib
 import re
+import configparser
 
 # --- Constants ---
 VERBOSE = False
-OPENAI_API_KEY = "lm-studio"
-OPENAI_BASE_URL = "http://10.0.0.208:1234/v1" # Or "http://localhost:1234/v1"
-LLM_MODEL_IDENTIFIER = "model-identifier" # Replace with your actual model
+# Default values for OpenAI configuration
+DEFAULT_OPENAI_API_KEY = "lm-studio"
+DEFAULT_OPENAI_BASE_URL = "http://localhost:1234/v1"
+DEFAULT_LLM_MODEL_IDENTIFIER = "model-identifier"
+
 NO_VALID_COMMAND_MARKER = "# No valid command"
 
 PROMPT_FILES_DIR = "system_prompts"
@@ -17,8 +20,14 @@ STAGE1_PROMPT_FILE = os.path.join(PROMPT_FILES_DIR, "stage1.md")
 STAGE3_PROMPT_FILE = os.path.join(PROMPT_FILES_DIR, "stage3.md")
 STAGE5_PROMPT_FILE = os.path.join(PROMPT_FILES_DIR, "stage5.md")
 
+CONFIG_FILE_PATH = os.path.expanduser("~/.agentgdb_config.ini")
+
 # --- Global Variables ---
 g_openai_client = None
+g_openai_api_key = None
+g_openai_base_url = None
+g_llm_model_identifier = None
+
 g_system_prompts = {
     "stage1": None,
     "stage3": None,
@@ -62,12 +71,88 @@ def load_system_prompts():
       return False
   return True
 
+def load_plugin_configuration():
+  """Loads API key, base URL, and model ID from the config file, using defaults if not found."""
+  global g_openai_api_key, g_openai_base_url, g_llm_model_identifier
+
+  # Initialize with default values
+  g_openai_api_key = DEFAULT_OPENAI_API_KEY
+  g_openai_base_url = DEFAULT_OPENAI_BASE_URL
+  g_llm_model_identifier = DEFAULT_LLM_MODEL_IDENTIFIER
+
+  config = configparser.ConfigParser()
+  loaded_from_config = {key: False for key in ["api_key", "base_url", "model_identifier"]}
+
+  if not os.path.exists(CONFIG_FILE_PATH):
+    print(f"Info: Configuration file not found: {CONFIG_FILE_PATH}.")
+    print(f"Using default settings: API Key='{DEFAULT_OPENAI_API_KEY}', Base URL='{DEFAULT_OPENAI_BASE_URL}', Model='{DEFAULT_LLM_MODEL_IDENTIFIER}'.")
+    print(f"You can create a configuration file at {CONFIG_FILE_PATH} or use 'agentgdb_config_setup.py' to set these values.")
+    return True # Defaults are set
+
+  try:
+    config.read(CONFIG_FILE_PATH)
+    if 'Credentials' in config:
+        # Attempt to load each key, retaining default if key is not in config
+        temp_api_key = config.get('Credentials', 'api_key', fallback=None)
+        if temp_api_key is not None:
+            g_openai_api_key = temp_api_key
+            loaded_from_config["api_key"] = True
+
+        temp_base_url = config.get('Credentials', 'base_url', fallback=None)
+        if temp_base_url is not None:
+            g_openai_base_url = temp_base_url
+            loaded_from_config["base_url"] = True
+
+        temp_model_id = config.get('Credentials', 'model_identifier', fallback=None)
+        if temp_model_id is not None:
+            g_llm_model_identifier = temp_model_id
+            loaded_from_config["model_identifier"] = True
+        
+        print(f"Info: Loaded configuration from {CONFIG_FILE_PATH}.")
+        if not loaded_from_config["api_key"]:
+            print(f"  Info: API Key not found in config, using default: '{DEFAULT_OPENAI_API_KEY}'.")
+        if not loaded_from_config["base_url"]:
+            print(f"  Info: Base URL not found in config, using default: '{DEFAULT_OPENAI_BASE_URL}'.")
+        if not loaded_from_config["model_identifier"]:
+            print(f"  Info: Model Identifier not found in config, using default: '{DEFAULT_LLM_MODEL_IDENTIFIER}'.")
+    else:
+        print(f"Info: '[Credentials]' section not found in {CONFIG_FILE_PATH}. Using default settings.")
+        # Defaults are already set, so no further action needed here
+
+    # Final check to ensure that values (either default or loaded) are not empty if they are critical
+    # For now, we assume defaults are valid and non-empty. If defaults could be empty, add checks here.
+    if not g_openai_api_key or not g_openai_base_url or not g_llm_model_identifier:
+        print("Error: Critical configuration (API Key, Base URL, or Model ID) is missing or empty after loading defaults and config.")
+        print(f"  API Key: '{g_openai_api_key}'")
+        print(f"  Base URL: '{g_openai_base_url}'")
+        print(f"  Model ID: '{g_llm_model_identifier}'")
+        print(f"Please ensure these are set either in {CONFIG_FILE_PATH} or as valid defaults in the script.")
+        return False
+        
+    return True
+  except configparser.Error as e:
+    print(f"Error reading configuration file {CONFIG_FILE_PATH}: {e}. Using default settings.")
+    # Defaults are already set, but indicate that config reading failed.
+    return True # Proceed with defaults despite error in config file
+  except Exception as e:
+    print(f"An unexpected error occurred while loading configuration: {e}. Using default settings.")
+    return True # Proceed with defaults
+
 def ensure_openai_client_ready():
   """
   Initializes the OpenAI client and loads system prompts if not already done.
   Returns True if successful, False otherwise.
   """
-  global g_openai_client
+  global g_openai_client, g_openai_api_key, g_openai_base_url, g_llm_model_identifier
+
+  # Load plugin configuration first
+  if not (g_openai_api_key and g_openai_base_url and g_llm_model_identifier): # Check if already loaded by a previous call
+      print_debug("Loading plugin configuration...")
+      if not load_plugin_configuration():
+          print("Failed to load plugin configuration. Aborting OpenAI client setup.")
+          return False
+      print_debug("Plugin configuration processed (defaults or loaded).")
+
   if g_openai_client is None:
     print_debug("Setting up OpenAI client...")
     # Extend Python search path for site-packages only when needed
@@ -98,13 +183,13 @@ def ensure_openai_client_ready():
 
     try:
       # OpenAIClient is already imported at the top
-      g_openai_client = OpenAIClient(base_url=OPENAI_BASE_URL, api_key=OPENAI_API_KEY)
+      g_openai_client = OpenAIClient(base_url=g_openai_base_url, api_key=g_openai_api_key)
       print_debug("Success.")
       print_debug("\n")
     except Exception as e: # Catching a broader exception for client initialization
       print(f"Error: Failed to initialize OpenAI client: {e}")
-      print("Please ensure your OpenAI server is running and accessible.")
-      print(f"Attempted to connect to: {OPENAI_BASE_URL}")
+      print("Please ensure your OpenAI server is running and accessible, and your configuration is correct.")
+      print(f"Attempted to connect to: {g_openai_base_url} with the provided API key.")
       return False
 
   # Load prompts if not already loaded
@@ -119,7 +204,7 @@ def ensure_openai_client_ready():
 
 def query_llm(x_system_message, x_prompt):
   """Queries the LLM and returns the collected response."""
-  global g_openai_client
+  global g_openai_client, g_llm_model_identifier
   if not g_openai_client:
     print("OpenAI client not available.")
     return "" # Or raise an exception
@@ -131,7 +216,7 @@ def query_llm(x_system_message, x_prompt):
 
   try:
     stream = g_openai_client.chat.completions.create(
-      model=LLM_MODEL_IDENTIFIER,
+      model=g_llm_model_identifier,
       messages=messages,
       temperature=0.0,
       stream=True
@@ -285,7 +370,7 @@ class AskGdbCommand(gdb.Command):
 if __name__ == "__main__":
   if not ensure_openai_client_ready():
     print("Failed to initialize AI GDB agent during startup. Some features might not work.")
-    print("Please check your OpenAI client configuration and prompt files.")
+    print("Please check your OpenAI client configuration (e.g., API key, base URL, model ID in ~/.agentgdb_config.ini) and system prompt files.")
   else:
     print_light("(gdb) GDB AI Agent installed. Type 'agent' or 'ask' followed by your query to use.\n")
   AgentGdbCommand()

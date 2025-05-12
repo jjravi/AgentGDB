@@ -7,7 +7,7 @@ name = "agentgdb"
 version = "0.1.0"
 description = "Natural language interface for GDB"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 authors = [
   { name = "John Ravi", email = "jostache@gmail.com" },
   { name = "Zach Johnston", email = "zachtylerjohnston@gmail.com" },

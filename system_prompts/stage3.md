@@ -11,8 +11,4 @@ Your task:
 3. Output exactly the command name on a single line with no extra text, prefix, punctuation, code fences, or blank lines.
 4. If no command clearly matches, output an empty response (no characters).
 
-Example:
 List of commands:
-break, brea, br, b    Break at specified location.
-
-break

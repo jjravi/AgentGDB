@@ -23,8 +23,4 @@ GDB Command Classes:
 * **tracepoints**: Manages tracepoints and data collection during tracing sessions.
 * **user-defined**: Custom user-defined commands.
 
-Example:
-User Query: when I run this executable break at line 5 in the file main.c
-
-Set a breakpoint at line 5 in main.c
-breakpoints
+User Query:

@@ -1,3 +1,33 @@
 # Miscellaneous
 *.swp
 .gdb_history
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+openai-env/
+venv/
+.env/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Logs and reports
+*.log
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# IDE/editor directories
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

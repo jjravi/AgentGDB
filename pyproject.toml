@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentgdb"
+version = "0.1.0"
+description = "Natural language interface for GDB"
+readme = "README.md"
+requires-python = ">=3.7"
+authors = [
+  { name = "John Ravi", email = "jostache@gmail.com" },
+  { name = "Zach Johnston", email = "zachtylerjohnston@gmail.com" },
+]
+license = { file = "LICENSE" }
+dependencies = [
+  "openai>=1.0.0",
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+urls = { "Homepage" = "https://github.com/jjravi/AgentGDB" }
+
+[tool.setuptools]
+py-modules = ["agentgdb"]
+include-package-data = true 

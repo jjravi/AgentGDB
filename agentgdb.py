@@ -426,4 +426,4 @@ if __name__ == "__main__":
   else:
     print("[AgentGDB] GDB AI Agent installed. Type 'agent' or 'ask' followed by your query to use.")
   AgentGdbCommand()
-  AskGdbCommand()
+  AskGdbCommand() 

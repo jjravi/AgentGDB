@@ -1,8 +1,8 @@
 # AgentGDB
 
-Supercharge your GDB/LLDB debugging with the power of LLMs!
+Supercharge your GDB debugging with the power of LLMs!
 
-AgentGDB is a tool that brings natural language understanding to the GDB/LLDB debugger. Describe what you want to do in plain English, and AgentGDB will translate your request into the appropriate GDB/LLDB commands—optionally explaining its reasoning and leveraging help commands to ensure accuracy. Focus on solving bugs, not memorizing debugger syntax!
+AgentGDB is a tool that brings natural language understanding to the GDB debugger. Describe what you want to do in plain English, and AgentGDB will translate your request into the appropriate GDB commands. Focus on solving bugs, not memorizing debugger syntax!
 
 ![AgentGDB Screenshot](TODO)
 
@@ -13,88 +13,82 @@ AgentGDB is a tool that brings natural language understanding to the GDB/LLDB de
 3. [Usage](#usage)
 4. [Features](#features)
 5. [Contributing](#contributing)
-6. [Staying Updated](#staying-updated)
 
 ---
 
 ## Installation
 
-First, ensure you have Python 3.7+ and [pip](https://pip.pypa.io/en/stable/installation/) installed.
+You can install AgentGDB using pip:
 
-Clone the repository and set up a virtual environment:
+```sh
+pip install agentgdb
+```
+
+Alternatively, you can install from source:
 
 ```sh
 git clone https://github.com/jjravi/AgentGDB.git
 cd AgentGDB
 python -m venv openai-env
 source openai-env/bin/activate
-pip install openai
+pip install -e .
 ```
 
-You’ll also need to have LLDB installed (comes with Xcode on macOS, or via your package manager on Linux).
+You'll need to have GDB installed on your system.
 
 ## Updating
 
-To update AgentGDB, simply pull the latest changes and re-install dependencies:
+To update AgentGDB, simply run:
+
+```sh
+pip install -U agentgdb
+```
+
+Or if installed from source:
 
 ```sh
 git pull origin main
-pip install -U openai
+pip install -e .
 ```
 
 ## Usage
 
-1. **Import the AgentGDB script in LLDB:**
-
-   Add the following to your `~/.lldbinit`:
+1. **Start GDB with AgentGDB:**
 
    ```sh
-   command script import /full/path/to/AgentGDB/openai_lldb.py
+   gdb -x $(python -c "import agentgdb; print(agentgdb.__file__)") your_program
    ```
 
-2. **Start LLDB as usual:**
-
-   ```sh
-   lldb your_program
-   ```
-
-3. **Use the `llm` command:**
-
-   You can now use natural language in LLDB:
+   Or add to your `~/.gdbinit`:
 
    ```
-   (lldb) llm set a breakpoint at line 42 in main.cpp
+   source $(python -c "import agentgdb; print(agentgdb.__file__)")
    ```
 
-   AgentGDB will:
-   - Query the LLM for the correct LLDB command(s)
-   - Use `help` commands to verify and learn about LLDB features
-   - Show you the reasoning and the commands before executing them
+2. **Use the natural language commands:**
 
-4. **Example:**
+   You can now use natural language in GDB with two commands:
+   
+   - `agent`: Executes the command directly
+   - `ask`: Shows the suggested command and asks for confirmation before execution
 
+   Examples:
    ```
-   (lldb) llm print the value of variable foo
+   (gdb) agent show all breakpoints
+   (gdb) ask print the value of variable x
    ```
-
-   The LLM might respond with:
-
-   ```
-   To print the value of `foo`, use the following command:
-   ```lldb
-   print foo
-   ```
-   ```
-
-   Only the command inside the code block will be executed.
 
 ## Features
 
-- **Natural Language to LLDB:** Describe your intent, and AgentGDB figures out the command.
-- **LLDB Help Integration:** The agent uses `help` commands to learn and verify before acting.
-- **Markdown Command Parsing:** Only executes commands inside ```lldb code blocks for safety.
-- **Streaming Output:** See the LLM’s thought process and command generation in real time.
-- **Session Logging:** All interactions are logged for review and reproducibility.
+- **Natural Language to GDB:** Describe your intent, and AgentGDB figures out the command.
+- **Multi-stage Processing:** 
+  1. Classifies your query into GDB command categories
+  2. Gets help for relevant command class
+  3. Selects the most appropriate command
+  4. Gets detailed help for the selected command
+  5. Generates the exact GDB command to accomplish your intent
+- **Two Interaction Modes:** Direct execution with `agent` or confirmation-based with `ask`
+- **Streaming Output:** See the LLM's thought process and command generation in real time.
 
 ## Contributing
 
@@ -103,10 +97,3 @@ Contributions are welcome! Please open issues or pull requests on [GitHub](https
 ---
 
 **Note:** AgentGDB is under active development. Feedback and suggestions are highly appreciated!
-
-## GDB
-gdb_test.py implements this for gdb. You still need to have the openai Python package installed. It is recommended to use a virtual environment like instructed above. Pass the Python script to gdb with the -x argument.
-
-```
-gdb -x ./gdb_test.py <path to binary>
-```

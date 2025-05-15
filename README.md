@@ -53,30 +53,61 @@ pip install -e .
 
 ## Usage
 
-1. **Start GDB with AgentGDB:**
+To use AgentGDB, you need to configure GDB to find the AgentGDB package and its dependencies. The recommended way is to add the following to your `~/.gdbinit` file:
 
-   ```sh
-   gdb -x $(python -c "import agentgdb; print(agentgdb.__file__)") your_program
-   ```
+```python
+# In ~/.gdbinit
+python
+import sys
+import subprocess
+import os
 
-   Or add to your `~/.gdbinit`:
+try:
+    env_python = "python3"  # Or "python", or e.g., "/path/to/venv/bin/python"
 
-   ```
-   source $(python -c "import agentgdb; print(agentgdb.__file__)")
-   ```
+    paths_str = subprocess.check_output(
+        [env_python, "-c", "import sys, os; print(os.linesep.join(sys.path))"],
+        stderr=subprocess.PIPE
+    ).decode("utf-8")
 
-2. **Use the natural language commands:**
+    for p in paths_str.split(os.linesep):
+        if p and os.path.isdir(p) and p not in sys.path:
+            sys.path.append(p)
 
-   You can now use natural language in GDB with two commands:
-   
-   - `agent`: Executes the command directly
-   - `ask`: Shows the suggested command and asks for confirmation before execution
+    import agentgdb
+    gdb.execute(f"source {agentgdb.MAIN_SCRIPT_PATH}") # load config and register GDB commands.
 
-   Examples:
-   ```
-   (gdb) agent show all breakpoints
-   (gdb) ask print the value of variable x
-   ```
+except FileNotFoundError:
+    print(f"[AgentGDB] Error: Python executable '{env_python}' not found. Please check the path in your .gdbinit.")
+except subprocess.CalledProcessError as e:
+    error_message = e.stderr.decode().strip() if e.stderr else str(e)
+    print(f"[AgentGDB] Error getting sys.path from '{env_python}': {error_message}")
+    print(f"[AgentGDB] Ensure '{env_python}' is a valid Python interpreter and has the 'agentgdb' package and its dependencies (like 'openai') installed.")
+except ImportError:
+    print("[AgentGDB] Error: Could not import 'agentgdb' package after setting sys.path.")
+    print(f"[AgentGDB] This usually means 'agentgdb' is not installed in the Python environment targeted by '{env_python}'.")
+except Exception as e:
+    print(f"[AgentGDB] An unexpected error occurred during AgentGDB setup: {e}")
+
+end
+```
+
+Once your `~/.gdbinit` is configured, start GDB as usual:
+
+```sh
+gdb your_program
+```
+
+Then, you can use the natural language commands:
+
+- `agent`: Executes the command directly
+- `ask`: Shows the suggested command and asks for confirmation before execution
+
+Examples:
+```
+(gdb) agent show all breakpoints
+(gdb) ask print the value of variable x
+```
 
 ## Features
 

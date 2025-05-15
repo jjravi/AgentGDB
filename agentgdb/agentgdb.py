@@ -8,6 +8,8 @@ import configparser
 
 # --- Constants ---
 
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Controls whether debug messages are displayed
 # This will be overwritten by config file if present
 VERBOSE = False
@@ -19,7 +21,7 @@ DEFAULT_LLM_MODEL_IDENTIFIER = "model-identifier"
 
 NO_VALID_COMMAND_MARKER = "# No valid command"
 
-PROMPT_FILES_DIR = "system_prompts"
+PROMPT_FILES_DIR = os.path.join(_BASE_DIR, "system_prompts")
 STAGE1_PROMPT_FILE = os.path.join(PROMPT_FILES_DIR, "stage1.md")
 STAGE3_PROMPT_FILE = os.path.join(PROMPT_FILES_DIR, "stage3.md")
 STAGE5_PROMPT_FILE = os.path.join(PROMPT_FILES_DIR, "stage5.md")
@@ -189,26 +191,6 @@ def ensure_openai_client_ready():
 
   if g_openai_client is None:
     print_verbose("Setting up OpenAI client...")
-    # Extend Python search path for site-packages only when needed
-    if not hasattr(ensure_openai_client_ready, 'path_extended'):
-      try:
-        import subprocess
-        # Use sys.executable to ensure we're using the same python interpreter
-        paths_str = subprocess.check_output(
-            ["python", '-c', "import os,sys;print(os.linesep.join(sys.path).strip())"]
-        ).decode("utf-8")
-        paths = paths_str.split(os.linesep)
-        for p in paths:
-            if p not in sys.path: # Avoid duplicates
-                sys.path.append(p)
-        ensure_openai_client_ready.path_extended = True
-      except subprocess.CalledProcessError as e:
-        print_error(f"Error extending Python path: {e}")
-        return False
-      except Exception as e:
-        print_error(f"An unexpected error occurred while extending Python path: {e}")
-        return False
-    
     try:
       from openai import OpenAI as OpenAIClient
     except ImportError:

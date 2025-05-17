@@ -356,17 +356,29 @@ def gdb_llm_prompt(x_prompt, x_ask=False):
   prompt_stage3 = system_message_stage3 + "\n" + gdb_cmd_class_help_filtered
   prompt_stage3 = prompt_stage3 + "\nUser Query: "
   print_verbose("Stage 3: Selecting specific command...\n")
-  selected_command = query_llm(prompt_stage3, x_prompt)
+  selected_command_raw = query_llm(prompt_stage3, x_prompt)
 
-  if not selected_command:
+  if not selected_command_raw:
     print_error("Stage 3: LLM failed to select a command. Please try again.\n")
     return
+
+  # Handle potential <think> blocks or other multi-line preamble from the LLM.
+  # The actual selected command is expected to be the last non-empty line.
+  selected_command_lines = [line for line in selected_command_raw.split("\n") if line.strip()]
+  if not selected_command_lines:
+      print_error("Stage 3: LLM returned an empty response after filtering. Please try again.\n")
+      return
+  selected_command = selected_command_lines[-1].strip()
+
   if selected_command == NO_VALID_COMMAND_MARKER: # Assuming LLM might return this for clarity
       print_error("Stage 3: LLM indicated no specific command found for your query.\n")
       return
+  if not selected_command: # Added check in case the last line was empty after strip or if NO_VALID_COMMAND_MARKER was the only content
+    print_error("Stage 3: LLM failed to select a command after processing the response. Please try again.\n")
+    return
 
   # STAGE 4: Get the detailed help for the selected command
-  gdb_cmd_stage4 = "help " + selected_command.strip()
+  gdb_cmd_stage4 = "help " + selected_command # .strip() is already done
   print_verbose(f"Stage 4: Getting detailed help for command '{selected_command}'...\n")
   gdb_detailed_help = execute_gdb_command(gdb_cmd_stage4, to_string=True)
   if gdb_detailed_help is None:

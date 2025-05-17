@@ -281,11 +281,16 @@ def gdb_llm_prompt(x_prompt, x_ask=False):
     print_error("Stage 1: Failed to get command class from LLM. Please try again.\n")
     return
 
-  response_lines = collected_response_stage1.split("\n")
+  response_lines = [line for line in collected_response_stage1.split("\n") if line.strip()] # Remove empty lines
   if len(response_lines) < 2:
     print_error(f"Stage 1: Unexpected LLM response format for command class: '{collected_response_stage1}'. Expected summary and command class on separate lines.\n")
     return
-  cmd_class = response_lines[1].strip()
+  
+  # The summary is the second to last line, and the command class is the last line.
+  # This handles potential <think> blocks or other multi-line preamble from the LLM.
+  summary_line = response_lines[-2].strip() # Optional: use if needed
+  cmd_class = response_lines[-1].strip()
+
   if not cmd_class:
     print_error("Stage 1: LLM did not provide a command class. Please try again.\n")
     return

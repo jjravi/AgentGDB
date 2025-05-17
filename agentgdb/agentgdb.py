@@ -393,11 +393,21 @@ def gdb_llm_prompt(x_prompt, x_ask=False):
   prompt_stage5 = system_message_stage5 + "\n" + gdb_detailed_help
   prompt_stage5 = prompt_stage5 + "\nUser Query: "
   print_verbose("Stage 5: Generating final GDB command...\n")
-  final_gdb_cmd = query_llm(prompt_stage5, x_prompt)
+  final_gdb_cmd_raw = query_llm(prompt_stage5, x_prompt)
+
+  if not final_gdb_cmd_raw.strip():
+    print_error("Stage 5: LLM returned an empty or whitespace-only response. Please try again.\n")
+    return
+
+  # Assume the actual command block is the last "paragraph" (separated by blank lines).
+  # This handles potential <think> blocks if they are followed by a blank line before the command(s).
+  paragraphs = re.split(r'\n\s*\n', final_gdb_cmd_raw.strip())
+  final_gdb_cmd = paragraphs[-1].strip() # Get the last paragraph and strip it.
 
   if not final_gdb_cmd:
-    print_error("Stage 5: LLM failed to generate the final command. Please try again.\n")
+    print_error("Stage 5: LLM failed to generate the final command (extracted block is empty). Please try again.\n")
     return
+  
   if final_gdb_cmd == NO_VALID_COMMAND_MARKER:
     print_error("Stage 5: LLM indicated no valid command could be generated based on the help provided. Please try again or rephrase your query.\n")
     return

@@ -191,6 +191,23 @@ def ensure_openai_client_ready():
 
   if g_openai_client is None:
     print_verbose("Setting up OpenAI client...")
+    # Extend Python search path for site-packages only when needed
+    if not hasattr(ensure_openai_client_ready, 'path_extended'):
+      try:
+        import subprocess
+        # Use sys.executable to ensure we're using the same python interpreter
+        paths_str = subprocess.check_output(["python", '-c', "import os,sys;print(os.linesep.join(sys.path).strip())"]).decode("utf-8")
+        paths = paths_str.split(os.linesep)
+        for p in paths:
+            if p not in sys.path: # Avoid duplicates
+                sys.path.append(p)
+        ensure_openai_client_ready.path_extended = True
+      except subprocess.CalledProcessError as e:
+        print_error(f"Error extending Python path: {e}")
+        return False
+      except Exception as e:
+        print_error(f"An unexpected error occurred while extending Python path: {e}")
+        return False
     try:
       from openai import OpenAI as OpenAIClient
     except ImportError:

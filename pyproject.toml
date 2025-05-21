@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentgdb"
-version = "0.1.4"
+version = "0.1.5"
 description = "Natural language interface for GDB"
 readme = "README.md"
 requires-python = ">=3.8"
